@@ -27,23 +27,24 @@ static void fileCheck () {
 
 %group Plist
 
-NSMutableDictionary *cameraProperties;
-NSMutableDictionary *sessionProperties;
-NSMutableDictionary *frontCameraLiveSourceOptions;
+%hook AVResolvedCaptureOptions
 
-%hook AVCaptureFigVideoDevice
-
-- (id)initWithProperties:(NSDictionary *)properties // All things here are to inject HDR properties into Camera system
+- (id)initWithCaptureOptionsDictionary:(id)captureOptionsDictionary // All things here are to inject HDR properties into Camera system
 {
-	cameraProperties = [properties mutableCopy];
-	[cameraProperties setObject:[NSNumber numberWithBool:YES] forKey:@"hdrSupported"];
-	sessionProperties = [[cameraProperties objectForKey:@"AVCaptureSessionPresetPhoto"] mutableCopy];
-	frontCameraLiveSourceOptions = [[sessionProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
-	[frontCameraLiveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
-	[sessionProperties setObject:frontCameraLiveSourceOptions forKey:@"LiveSourceOptions"];
-	[cameraProperties setObject:sessionProperties forKey:@"AVCaptureSessionPresetPhoto"];
-	return %orig(cameraProperties);
+	NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
+	if ([[[cameraProperties objectForKey:@"OverridePrefixes"] description] isEqualToString:@"P:"]) {
+		NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
+		if ([[[liveSourceOptions objectForKey:@"VideoPort"] description] isEqualToString:@"PortTypeFront"]) {
+			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
+			[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
+			return %orig(cameraProperties);
+		}
+		else return %orig;
+	}
+	else
+		return %orig;
 }
+		
 
 %end
 
