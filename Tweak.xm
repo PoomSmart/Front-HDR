@@ -3,7 +3,6 @@
 
 BOOL HDRIsOn;
 BOOL isFrontCamera;
-NSMutableDictionary *capDict;
 @interface PLPreviewOverlayView : UIView { }
 @end
 
