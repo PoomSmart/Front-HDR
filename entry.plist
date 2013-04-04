@@ -1,0 +1,10 @@
+{
+	entry = {
+		bundle = "FrontHDRSettings";
+		cell = PSLinkCell;
+		detail = "FrontHDRPreferenceController";
+		icon = "FrontHDR.png";
+		isController = 1;
+		label = "Front HDR";
+	};
+}

@@ -1,6 +1,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <PhotoLibrary/PhotoLibrary.h>
 
+static BOOL FrontHDR;
 BOOL HDRIsOn;
 BOOL isFrontCamera;
 @interface PLPreviewOverlayView : UIView { }
@@ -30,20 +31,23 @@ static void fileCheck () {
 
 - (id)initWithCaptureOptionsDictionary:(id)captureOptionsDictionary // All things here are to inject HDR properties into Camera system
 {
-	NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
-	if ([[[cameraProperties objectForKey:@"OverridePrefixes"] description] isEqualToString:@"P:"]) {
-		NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
-		if ([[[liveSourceOptions objectForKey:@"VideoPort"] description] isEqualToString:@"PortTypeFront"]) {
-			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
-			[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
-			return %orig(cameraProperties);
+	if (FrontHDR) {
+		NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
+		if ([[[cameraProperties objectForKey:@"OverridePrefixes"] description] isEqualToString:@"P:"]) {
+			NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
+			if ([[[liveSourceOptions objectForKey:@"VideoPort"] description] isEqualToString:@"PortTypeFront"]) {
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
+				[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
+				return %orig(cameraProperties);
+			}
+			else return %orig;
 		}
-		else return %orig;
+		else
+			return %orig;
 	}
-	else
-		return %orig;
+	else return %orig;
 }
-		
 
 %end
 
@@ -53,17 +57,19 @@ static void fileCheck () {
 %group HDR
 
 %hook PLCameraController
-// This will hack enable HDR label in Front Camera
-- (int)cameraDevice { return isFrontCamera ? 0 : %orig; }
-- (BOOL)supportsHDR { return isFrontCamera ? YES : %orig; } // Just add support
-- (BOOL)isHDREnabled { return HDRIsOn && isFrontCamera ? YES : %orig; } // This is the important line, without this, HDR won't work
+
+- (int)cameraDevice { return isFrontCamera && FrontHDR ? 0 : %orig; } // This will hack enable HDR label in Front Camera
+- (BOOL)supportsHDR { return isFrontCamera && FrontHDR ? YES : %orig; } // Just add support
+- (BOOL)isHDREnabled { return HDRIsOn && isFrontCamera && FrontHDR ? YES : %orig; } // This is the important line, without this, HDR won't work
 
 - (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2 // Check for code running only in Front Camera & Photo mode
 {
-	if (arg1 == 0 && arg2 == 1)
-		isFrontCamera = YES;
-	else
-		isFrontCamera = NO;
+	if (FrontHDR) {
+		if (arg1 == 0 && arg2 == 1)
+			isFrontCamera = YES;
+		else
+			isFrontCamera = NO;
+	}
 	%orig;
 }
 
@@ -73,7 +79,7 @@ static void fileCheck () {
 
 - (void)_toggleCameraButtonWasPressed:(id)pressed
 {
-	if (isFrontCamera) {
+	if (isFrontCamera && FrontHDR) {
 		UIView *cameraView = MSHookIvar<PLPreviewOverlayView *>(self, "_overlayView");
 		[UIView transitionFromView:cameraView toView:cameraView  
                   duration:0.7 
@@ -84,38 +90,45 @@ static void fileCheck () {
 	else %orig;
 }
 
-- (void)cameraControllerPreviewDidStart:(id)arg1
-{
-	%orig;
-	fileCheck();
-}
+- (void)cameraControllerPreviewDidStart:(id)arg1 { %orig; if (FrontHDR) fileCheck(); }
 
-- (void)cameraControllerModeDidChange:(id)arg1
-{
-	%orig;
-	fileCheck();
-}
+- (void)cameraControllerModeDidChange:(id)arg1 { %orig;	if (FrontHDR) fileCheck(); }
 
 - (void)toggleHDR:(BOOL)arg1 { HDRIsOn = arg1; %orig; } // Handle HDR toggle
-- (BOOL)HDRIsOn { return HDRIsOn && isFrontCamera ? YES : %orig; }
-- (BOOL)_optionsButtonShouldBeHidden { return isFrontCamera ? NO : %orig; } // So that user can toggle HDR in Front Camera
-- (BOOL)_flashButtonShouldBeHidden { return isFrontCamera ? YES : %orig; } // From the previous hack, this line will hide Flash Button
+- (BOOL)HDRIsOn { return HDRIsOn && isFrontCamera && FrontHDR ? YES : %orig; }
+- (BOOL)_optionsButtonShouldBeHidden { return isFrontCamera && FrontHDR ? NO : %orig; } // So that user can toggle HDR in Front Camera
+- (BOOL)_flashButtonShouldBeHidden { return isFrontCamera && FrontHDR ? YES : %orig; } // From the previous hack, this line will hide Flash Button
 
 %end
 
 %hook PLCameraSettingsView
 
-- (void)_enterPanoramaMode { if (isFrontCamera); else %orig; } // Prevent from user to go into Panorama Mode in Front Camera, it won't work :P
+- (void)_enterPanoramaMode { if (isFrontCamera && FrontHDR); else %orig; } // Prevent from user to go into Panorama Mode in Front Camera, it won't work :P
 
 %end
 
 %end
+
+
+static void FrontHDRLoader()
+{
+  NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"];
+  id FrontHDREnabled = [dict objectForKey:@"FrontHDREnabled"];
+  FrontHDR = FrontHDREnabled ? [FrontHDREnabled boolValue] : YES;
+}
+
+static void PostNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	FrontHDRLoader();
+}
 
 
 %ctor
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-	[pool release];
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PostNotification, CFSTR("com.PS.FrontHDR.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+	FrontHDRLoader();
+	[pool drain];
 	if ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.camera"] || [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.springboard"])
 	{ %init(Plist); %init(HDR) }
 }

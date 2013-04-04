@@ -1,7 +1,7 @@
 Architecture: iphoneos-arm
 Name: Front HDR
 Package: com.PS.FrontHDR
-Version: 1.0
+Version: 1.1
 Author: PoomSmart
 Pre-Depends: gsc.hdr-image-capture, firmware (>= 6.0)
 Depends: mobilesubstrate
