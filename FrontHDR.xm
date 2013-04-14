@@ -1,14 +1,19 @@
 #import <AVFoundation/AVFoundation.h>
 #import <PhotoLibrary/PhotoLibrary.h>
+#import <sys/utsname.h>
+#import "substrate.h"
 
 static BOOL FrontHDR;
+static BOOL useNative;
 BOOL HDRIsOn;
 BOOL isFrontCamera;
-@interface PLPreviewOverlayView : UIView { }
+
+@interface PLPreviewOverlayView : UIView {}
 @end
 
-@interface PLCameraController : NSObject
+@interface PLCameraController : NSObject {}
 - (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2;
+- (void)_configureSessionWithCameraMode:(int)arg1 cameraDevice:(int)arg2;
 @end
 
 static void fileCheck () {
@@ -25,47 +30,52 @@ static void fileCheck () {
 	}
 }
 
-%group Plist
+static void FrontHDRLoader()
+{
+	NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"];
+	id FrontHDREnabled = [dict objectForKey:@"FrontHDREnabled"];
+	FrontHDR = FrontHDREnabled ? [FrontHDREnabled boolValue] : YES;
+	id useNativeEnabled = [dict objectForKey:@"useNative"];
+	useNative = useNativeEnabled ? [useNativeEnabled boolValue] : NO;
+}
 
 %hook AVResolvedCaptureOptions
 
 - (id)initWithCaptureOptionsDictionary:(id)captureOptionsDictionary // All things here are to inject HDR properties into Camera system
 {
-	if (FrontHDR) {
-		NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
-		if ([[[cameraProperties objectForKey:@"OverridePrefixes"] description] isEqualToString:@"P:"]) {
-			NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
-			if ([[[liveSourceOptions objectForKey:@"VideoPort"] description] isEqualToString:@"PortTypeFront"]) {
-				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
-				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
-				[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
-				return %orig(cameraProperties);
-			}
-			else return %orig;
+	NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
+	NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
+	if ([[[cameraProperties objectForKey:@"OverridePrefixes"] description] isEqualToString:@"P:"] &&
+		[[[liveSourceOptions objectForKey:@"VideoPort"] description] isEqualToString:@"PortTypeFront"] &&
+		FrontHDR)
+		{
+			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
+			
+			struct utsname systemInfo;
+			uname(&systemInfo);
+			NSString *modelName = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
+
+			if (![modelName hasPrefix:@"iPhone3"])
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"]; // iPhone 4 cannot add this value
+			[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
+			return %orig(cameraProperties);
 		}
-		else
-			return %orig;
-	}
 	else return %orig;
 }
 
 %end
 
-%end
-
-
-%group HDR
-
 %hook PLCameraController
 
-- (int)cameraDevice { return isFrontCamera && FrontHDR ? 0 : %orig; } // This will hack enable HDR label in Front Camera
-- (BOOL)supportsHDR { return isFrontCamera && FrontHDR ? YES : %orig; } // Just add support
+- (int)cameraDevice { return isFrontCamera && FrontHDR && !useNative ? 0 : %orig; } // This will hack enable HDR label in Front Camera
+
 - (BOOL)isHDREnabled { return HDRIsOn && isFrontCamera && FrontHDR ? YES : %orig; } // This is the important line, without this, HDR won't work
 
 - (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2 // Check for code running only in Front Camera & Photo mode
 {
+	FrontHDRLoader();
 	if (FrontHDR) {
-		if (arg1 == 0 && arg2 == 1)
+		if (arg1 == 0 && arg2 == 1) // arg1 = 0 means Photo mode, arg2 = 1 means Front Camera
 			isFrontCamera = YES;
 		else
 			isFrontCamera = NO;
@@ -79,7 +89,7 @@ static void fileCheck () {
 
 - (void)_toggleCameraButtonWasPressed:(id)pressed
 {
-	if (isFrontCamera && FrontHDR) {
+	if (isFrontCamera && FrontHDR && !useNative) {
 		UIView *cameraView = MSHookIvar<PLPreviewOverlayView *>(self, "_overlayView");
 		[UIView transitionFromView:cameraView toView:cameraView  
                   duration:0.7 
@@ -94,9 +104,10 @@ static void fileCheck () {
 
 - (void)cameraControllerModeDidChange:(id)arg1 { %orig;	if (FrontHDR) fileCheck(); }
 
-- (void)toggleHDR:(BOOL)arg1 { HDRIsOn = arg1; %orig; } // Handle HDR toggle
-- (BOOL)HDRIsOn { return HDRIsOn && isFrontCamera && FrontHDR ? YES : %orig; }
+- (void)toggleHDR:(BOOL)arg1 { if (FrontHDR) HDRIsOn = arg1; %orig; } // Handle HDR toggle
+
 - (BOOL)_optionsButtonShouldBeHidden { return isFrontCamera && FrontHDR ? NO : %orig; } // So that user can toggle HDR in Front Camera
+
 - (BOOL)_flashButtonShouldBeHidden { return isFrontCamera && FrontHDR ? YES : %orig; } // From the previous hack, this line will hide Flash Button
 
 %end
@@ -107,15 +118,6 @@ static void fileCheck () {
 
 %end
 
-%end
-
-
-static void FrontHDRLoader()
-{
-  NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"];
-  id FrontHDREnabled = [dict objectForKey:@"FrontHDREnabled"];
-  FrontHDR = FrontHDREnabled ? [FrontHDREnabled boolValue] : YES;
-}
 
 static void PostNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
 {
@@ -128,7 +130,8 @@ static void PostNotification(CFNotificationCenterRef center, void *observer, CFS
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PostNotification, CFSTR("com.PS.FrontHDR.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 	FrontHDRLoader();
-	[pool drain];
-	if ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.camera"] || [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.springboard"])
-	{ %init(Plist); %init(HDR) }
+	if ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.camera"] ||
+	[[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.springboard"])
+	%init;
+	[pool release];
 }

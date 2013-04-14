@@ -18,6 +18,8 @@
         <string>PSGroupCell</string>
         <key>label</key>
         <string>Front HDR</string>
+        <key>footerText</key>
+        <string>If enabled, Flip animation from Front Camera to Back Camera will be native but the HDR label won't show in Front Camera.</string>
       </dict>
       <dict>
         <key>cell</key>
@@ -30,6 +32,20 @@
         <string>FrontHDREnabled</string>
         <key>label</key>
         <string>Enabled</string>
+        <key>PostNotification</key>
+        <string>com.PS.FrontHDR.settingschanged</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSSwitchCell</string>
+        <key>default</key>
+        <false/>
+        <key>defaults</key>
+        <string>com.PS.FrontHDR</string>
+        <key>key</key>
+        <string>useNative</string>
+        <key>label</key>
+        <string>More Native</string>
         <key>PostNotification</key>
         <string>com.PS.FrontHDR.settingschanged</string>
       </dict>
