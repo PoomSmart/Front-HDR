@@ -1,19 +1,17 @@
 #import <AVFoundation/AVFoundation.h>
-#import <PhotoLibrary/PhotoLibrary.h>
 #import <sys/utsname.h>
 #import "substrate.h"
 
 static BOOL FrontHDR;
 static BOOL useNative;
-BOOL HDRIsOn;
-BOOL isFrontCamera;
+static BOOL HDRIsOn;
+static BOOL isFrontCamera;
 
 @interface PLPreviewOverlayView : UIView {}
 @end
 
 @interface PLCameraController : NSObject {}
 - (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2;
-- (void)_configureSessionWithCameraMode:(int)arg1 cameraDevice:(int)arg2;
 @end
 
 static void fileCheck () {

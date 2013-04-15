@@ -3,7 +3,6 @@ export ARCHS = armv7 armv7s
 TWEAK_NAME = FrontHDR
 FrontHDR_FILES = FrontHDR.xm
 FrontHDR_FRAMEWORKS = AVFoundation UIKit
-FrontHDR_PRIVATE_FRAMEWORKS = PhotoLibrary
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
