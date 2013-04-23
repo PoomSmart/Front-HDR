@@ -2,7 +2,7 @@ include theos/makefiles/common.mk
 export ARCHS = armv7 armv7s
 TWEAK_NAME = FrontHDR
 FrontHDR_FILES = FrontHDR.xm
-FrontHDR_FRAMEWORKS = AVFoundation UIKit
+FrontHDR_FRAMEWORKS = AVFoundation UIKit CoreGraphics
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
