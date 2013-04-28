@@ -19,3 +19,7 @@ Troubleshoot
 2. Camera freeze when switch from Front To Back Camera with HDR ON
  
   Fixed in version 1.0-3 and above.
+
+3. HDR images in iPhone 4 quality are bad
+
+  I'm fixing it and will release ASAP.
