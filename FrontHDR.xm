@@ -1,21 +1,23 @@
 #import <AVFoundation/AVFoundation.h>
 #import <sys/utsname.h>
 
+#define PreferencesChangedNotification "com.PS.FrontHDR.settingschanged"
+#define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
+#define Bool(dict, key, defaultBoolValue) ([[dict objectForKey:key] boolValue] ?: defaultBoolValue)
+#define FrontHDR Bool(prefDict, @"FrontHDREnabled", YES)
+
 #define MODEL 	struct utsname systemInfo; \
 				uname(&systemInfo); \
 				NSString *modelName = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
 
-static BOOL FrontHDR;
+static NSDictionary *prefDict = nil;
+static BOOL HDRIsOn;
 static BOOL isFrontCamera;
-BOOL HDRIsOn;
-
-@class PLCameraSettingsView, PLCameraSettingsGroupView;
-static PLCameraSettingsGroupView *panoramaGroup;
 
 // Check HDR settings from system's plist file
 static void fileCheck () {
 	NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.apple.mobileslideshow.plist"];
-	if (dict != nil && isFrontCamera) {
+	if (dict != nil) {
 		id camConfigDict = [dict objectForKey:@"CameraConfiguration"];
 			if (camConfigDict != nil) {
 				id camConfigHDRIsOn = [camConfigDict objectForKey:@"HDRIsOn"];
@@ -27,15 +29,12 @@ static void fileCheck () {
 	}
 }
 
-static void FrontHDRLoader()
+static void PreferencesChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
 {
-	NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"];
-	id FrontHDREnabled = [dict objectForKey:@"FrontHDREnabled"];
-	FrontHDR = FrontHDREnabled ? [FrontHDREnabled boolValue] : YES;
+	[prefDict release];
+	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
 }
 
-
-%group Plist
 
 %hook AVResolvedCaptureOptions
 
@@ -54,15 +53,10 @@ static void FrontHDRLoader()
 			[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
 			return %orig(cameraProperties);
 		}
-	else return %orig;
+	return %orig;
 }
 
 %end
-
-%end
-
-
-%group HDR
 
 %hook PLCameraController
 
@@ -72,17 +66,14 @@ static void FrontHDRLoader()
 
 - (BOOL)supportsHDR { return isFrontCamera && FrontHDR ? YES : %orig; }
 
-- (void)_previewStarted:(id)arg1 { %orig; if (FrontHDR) fileCheck(); }
+- (void)_previewStarted:(id)arg1 { %orig; if (FrontHDR && isFrontCamera) fileCheck(); }
 
-- (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2 // Check for code running only in Front Camera & Photo mode
+- (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2
 {
-	FrontHDRLoader();
-	if (FrontHDR) {
-		if (arg1 == 0 && arg2 == 1) // arg1 = 0 means Photo mode, arg2 = 1 means Front Camera
-			isFrontCamera = YES;
-		else
-			isFrontCamera = NO;
-	}
+	if (arg1 == 0 && arg2 == 1)
+		isFrontCamera = YES;
+	else
+		isFrontCamera = NO;
 	%orig;
 }
 
@@ -94,7 +85,7 @@ static void FrontHDRLoader()
 {
 	if (isFrontCamera && FrontHDR) {
 		[self performSelector:@selector(setCameraDevice:) withObject:self]; // Set Camera Device to 1 first
-		[self performSelector:@selector(_reallyToggleCamera) withObject:nil afterDelay:.15]; // Then toggle it to 0
+		[self performSelector:@selector(_reallyToggleCamera) withObject:nil afterDelay:.14]; // Then toggle it to 0
 	}
 	else %orig;
 }
@@ -105,27 +96,21 @@ static void FrontHDRLoader()
 
 - (BOOL)_optionsButtonShouldBeHidden { return isFrontCamera && FrontHDR ? NO : %orig; } // So that user can toggle HDR in Front Camera
 
-- (BOOL)_flashButtonShouldBeHidden { return isFrontCamera && FrontHDR ? YES : %orig; } // From the previous hack, this line will hide Flash Button
-
 %end
 
 %hook PLCameraSettingsView
 
-// Prevent from user to go into Panorama Mode in Front Camera, it won't work :P (Not For iPhone 4 users)
+// Prevent from user to go into Panorama Mode in Front Camera, it won't work :P
 - (void)layoutSubviews
 {
 	%orig;
 	if (FrontHDR) {
-		MODEL
-		if (![modelName hasPrefix:@"iPhone3"]) {
-			if (panoramaGroup == nil) panoramaGroup = MSHookIvar<PLCameraSettingsGroupView *>(self, "_panoramaGroup");
-			if (panoramaGroup != nil) {
-				if (isFrontCamera)
-					[(UIView *)panoramaGroup setAlpha:0.5];
-				else
-					[(UIView *)panoramaGroup setAlpha:1.0];
-			}
-		}
+		%class PLCameraSettingsGroupView;
+		PLCameraSettingsGroupView *panoramaGroup = MSHookIvar<PLCameraSettingsGroupView *>(self, "_panoramaGroup");
+		if (isFrontCamera)
+			[(UIView *)panoramaGroup setAlpha:0.5];
+		else
+			[(UIView *)panoramaGroup setAlpha:1.0];
 	}
 }
 
@@ -133,21 +118,11 @@ static void FrontHDRLoader()
 
 %end
 
-%end
-
-
-static void PostNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
-{
-	FrontHDRLoader();
-}
-
 
 %ctor
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PostNotification, CFSTR("com.PS.FrontHDR.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-	FrontHDRLoader();
-	%init(Plist);
-	%init(HDR);
+	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PreferencesChangedCallback, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
 	[pool release];
 }
