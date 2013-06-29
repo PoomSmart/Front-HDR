@@ -1,33 +1,16 @@
-#import <AVFoundation/AVFoundation.h>
-#import <sys/utsname.h>
+#import <substrate.h>
+
+static NSDictionary *prefDict = nil;
 
 #define PreferencesChangedNotification "com.PS.FrontHDR.settingschanged"
 #define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
-#define Bool(dict, key, defaultBoolValue) ([[dict objectForKey:key] boolValue] ?: defaultBoolValue)
-#define FrontHDR Bool(prefDict, @"FrontHDREnabled", YES)
+#define FrontHDR [[prefDict objectForKey:@"FrontHDREnabled"] boolValue]
 
-#define MODEL 	struct utsname systemInfo; \
-				uname(&systemInfo); \
-				NSString *modelName = [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
-
-static NSDictionary *prefDict = nil;
-static BOOL HDRIsOn;
 static BOOL isFrontCamera;
 
-// Check HDR settings from system's plist file
-static void fileCheck () {
-	NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.apple.mobileslideshow.plist"];
-	if (dict != nil) {
-		id camConfigDict = [dict objectForKey:@"CameraConfiguration"];
-			if (camConfigDict != nil) {
-				id camConfigHDRIsOn = [camConfigDict objectForKey:@"HDRIsOn"];
-					if (camConfigHDRIsOn != nil) {
-						BOOL soHDRIsOn = [camConfigHDRIsOn boolValue];
-						if (soHDRIsOn) HDRIsOn = YES;
-					}
-			}
-	}
-}
+@interface PLCameraController
+- (BOOL)isCapturingVideo;
+@end
 
 static void PreferencesChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
 {
@@ -38,7 +21,7 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 
 %hook AVResolvedCaptureOptions
 
-- (id)initWithCaptureOptionsDictionary:(id)captureOptionsDictionary // All things here are to inject HDR properties into Camera system
+- (id)initWithCaptureOptionsDictionary:(NSDictionary *)captureOptionsDictionary
 {
 	NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
 	NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
@@ -47,9 +30,7 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 		FrontHDR)
 		{
 			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
-			MODEL
-			if (![modelName hasPrefix:@"iPhone3"])
-				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"]; // iPhone 4 cannot add this value
+			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
 			[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
 			return %orig(cameraProperties);
 		}
@@ -60,13 +41,18 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 
 %hook PLCameraController
 
-- (int)cameraDevice { return isFrontCamera && FrontHDR ? 0 : %orig; } // This will hack enable HDR label in Front Camera
+- (BOOL)isHDREnabled
+{
+	if (FrontHDR && MSHookIvar<BOOL>(self, "_hdrEnabled") && MSHookIvar<int>(self, "_cameraDevice") == 1) {
+		return [self isCapturingVideo] ? %orig : YES;
+	}
+	return %orig;
+}
 
-- (BOOL)isHDREnabled { return HDRIsOn && isFrontCamera && FrontHDR ? YES : %orig; } // This is the important line, without this, HDR won't work
-
-- (BOOL)supportsHDR { return isFrontCamera && FrontHDR ? YES : %orig; }
-
-- (void)_previewStarted:(id)arg1 { %orig; if (FrontHDR && isFrontCamera) fileCheck(); }
+- (BOOL)supportsHDR
+{
+	return isFrontCamera && FrontHDR ? YES : %orig;
+}
 
 - (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2
 {
@@ -81,40 +67,39 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 
 %hook PLCameraView
 
-- (void)_toggleCameraButtonWasPressed:(id)pressed
+- (void)_updateOverlayControls
 {
-	if (isFrontCamera && FrontHDR) {
-		[self performSelector:@selector(setCameraDevice:) withObject:self]; // Set Camera Device to 1 first
-		[self performSelector:@selector(_reallyToggleCamera) withObject:nil afterDelay:.14]; // Then toggle it to 0
-	}
-	else %orig;
+	PLCameraController *cameraController = MSHookIvar<PLCameraController *>(self, "_cameraController");
+	if (MSHookIvar<int>(cameraController, "_cameraDevice") == 1 && FrontHDR) {
+		MSHookIvar<int>(cameraController, "_cameraDevice") = 0;
+		%orig;
+		MSHookIvar<int>(cameraController, "_cameraDevice") = 1;
+	} else %orig;
 }
 
-- (void)toggleHDR:(BOOL)enabled { if (FrontHDR) HDRIsOn = enabled; %orig; } // Handle HDR toggle
-
-- (BOOL)HDRIsOn { return isFrontCamera && FrontHDR && HDRIsOn ? YES : %orig; }
-
-- (BOOL)_optionsButtonShouldBeHidden { return isFrontCamera && FrontHDR ? NO : %orig; } // So that user can toggle HDR in Front Camera
+- (BOOL)_optionsButtonShouldBeHidden
+{
+	return isFrontCamera && FrontHDR ? NO : %orig;
+}
 
 %end
 
 %hook PLCameraSettingsView
 
-// Prevent from user to go into Panorama Mode in Front Camera, it won't work :P
 - (void)layoutSubviews
 {
 	%orig;
 	if (FrontHDR) {
-		%class PLCameraSettingsGroupView;
-		PLCameraSettingsGroupView *panoramaGroup = MSHookIvar<PLCameraSettingsGroupView *>(self, "_panoramaGroup");
-		if (isFrontCamera)
-			[(UIView *)panoramaGroup setAlpha:0.5];
-		else
-			[(UIView *)panoramaGroup setAlpha:1.0];
+		%c(PLCameraSettingsGroupView);
+		[(UIView *)MSHookIvar<PLCameraSettingsGroupView *>(self, "_panoramaGroup") setAlpha:(isFrontCamera ? 0.5 : 1.0)];
 	}
 }
 
-- (void)_enterPanoramaMode { if (isFrontCamera && FrontHDR); else %orig; }
+- (void)_enterPanoramaMode
+{
+	if (isFrontCamera && FrontHDR);
+	else %orig;
+}
 
 %end
 

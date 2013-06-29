@@ -3,8 +3,7 @@ Front-HDR
 
 Enable HDR Capture in Front Camera.
 
-Requires HDR-capable iDevices running iOS 6 and above including
-- iPhone 4
+Requires A5+ HDR-capable iDevices running iOS 6 or above including
 - iPhone 4S
 - iPhone 5
 - iPod touch 5G
@@ -19,7 +18,3 @@ Troubleshoot
 2. Camera freeze when switch from Front To Back Camera with HDR ON
  
   Fixed in version 1.0-3 and above.
-
-3. HDR images in iPhone 4 quality are bad
-
-  I'm fixing it and will release ASAP.

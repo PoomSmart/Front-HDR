@@ -8,6 +8,8 @@
     <dict>
       <key>cell</key>
       <string>PSLinkCell</string>
+      <key>icon</key>
+      <string>FrontHDR.png</string>
       <key>label</key>
       <string>Front HDR</string>
     </dict>
