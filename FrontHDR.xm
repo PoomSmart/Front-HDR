@@ -1,12 +1,17 @@
 #import <substrate.h>
 
-static NSDictionary *prefDict = nil;
-
 #define PreferencesChangedNotification "com.PS.FrontHDR.settingschanged"
 #define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
 #define FrontHDR [[prefDict objectForKey:@"FrontHDREnabled"] boolValue]
 
 static BOOL isFrontCamera;
+static NSDictionary *prefDict = nil;
+
+@interface PLCameraSettingsView
+@end
+
+@interface PLCameraSettingsGroupView : UIView
+@end
 
 @interface PLCameraController
 - (BOOL)isCapturingVideo;
@@ -54,12 +59,9 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 	return isFrontCamera && FrontHDR ? YES : %orig;
 }
 
-- (void)_setCameraMode:(int)arg1 cameraDevice:(int)arg2
+- (void)_setCameraMode:(int)mode cameraDevice:(int)device
 {
-	if (arg1 == 0 && arg2 == 1)
-		isFrontCamera = YES;
-	else
-		isFrontCamera = NO;
+	isFrontCamera = (mode == 0 && device == 1) ? YES : NO;
 	%orig;
 }
 
@@ -77,28 +79,19 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 	} else %orig;
 }
 
-- (BOOL)_optionsButtonShouldBeHidden
-{
-	return isFrontCamera && FrontHDR ? NO : %orig;
-}
-
-%end
-
-%hook PLCameraSettingsView
-
-- (void)layoutSubviews
+- (void)_showSettings:(BOOL)settings sender:(id)sender
 {
 	%orig;
-	if (FrontHDR) {
-		%c(PLCameraSettingsGroupView);
-		[(UIView *)MSHookIvar<PLCameraSettingsGroupView *>(self, "_panoramaGroup") setAlpha:(isFrontCamera ? 0.5 : 1.0)];
+	if (settings && FrontHDR) {
+		PLCameraSettingsView *settingsView = MSHookIvar<PLCameraSettingsView *>(self, "_settingsView");
+		[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setAlpha:isFrontCamera ? 0.5 : 1.0];
+		[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setUserInteractionEnabled:isFrontCamera ? NO : YES];
 	}
 }
 
-- (void)_enterPanoramaMode
+- (BOOL)_optionsButtonShouldBeHidden
 {
-	if (isFrontCamera && FrontHDR);
-	else %orig;
+	return isFrontCamera && FrontHDR ? NO : %orig;
 }
 
 %end
