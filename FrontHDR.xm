@@ -1,11 +1,19 @@
-#import <substrate.h>
+#import <AVFoundation/AVFoundation.h>
 
 #define PreferencesChangedNotification "com.PS.FrontHDR.settingschanged"
 #define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
 #define FrontHDR [[prefDict objectForKey:@"FrontHDREnabled"] boolValue]
 
-static BOOL isFrontCamera;
+#define isFrontCamera (self.cameraDevice == 1 && self.cameraMode == 0)
 static NSDictionary *prefDict = nil;
+
+@interface AVCaptureFigVideoDevice : AVCaptureDevice
+@end
+
+@interface PLCameraView
+@property(assign, nonatomic) int cameraDevice;
+@property(assign, nonatomic) int cameraMode;
+@end
 
 @interface PLCameraSettingsView
 @end
@@ -14,6 +22,8 @@ static NSDictionary *prefDict = nil;
 @end
 
 @interface PLCameraController
+@property(assign, nonatomic) int cameraDevice;
+@property(assign, nonatomic) int cameraMode;
 - (BOOL)isCapturingVideo;
 @end
 
@@ -30,15 +40,18 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 {
 	NSMutableDictionary *cameraProperties = [captureOptionsDictionary mutableCopy];
 	NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
-	if ([[[cameraProperties objectForKey:@"OverridePrefixes"] description] isEqualToString:@"P:"] &&
-		[[[liveSourceOptions objectForKey:@"VideoPort"] description] isEqualToString:@"PortTypeFront"] &&
-		FrontHDR)
-		{
-			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
-			[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
-			[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
-			return %orig(cameraProperties);
+	if (FrontHDR) {
+		if ([[cameraProperties objectForKey:@"OverridePrefixes"] isEqualToString:@"P:"]) {
+			if ([[liveSourceOptions objectForKey:@"VideoPort"] isEqualToString:@"PortTypeFront"]) {
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
+				[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
+				return %orig(cameraProperties);
+			}
+			return %orig;
 		}
+		return %orig;
+	}
 	return %orig;
 }
 
@@ -48,8 +61,10 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 
 - (BOOL)isHDREnabled
 {
-	if (FrontHDR && MSHookIvar<BOOL>(self, "_hdrEnabled") && MSHookIvar<int>(self, "_cameraDevice") == 1) {
-		return [self isCapturingVideo] ? %orig : YES;
+	if (FrontHDR) {
+		if (MSHookIvar<BOOL>(self, "_hdrEnabled") && MSHookIvar<int>(self, "_cameraDevice") == 1)
+			return [self isCapturingVideo] ? %orig : YES;
+		return %orig;
 	}
 	return %orig;
 }
@@ -59,12 +74,6 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 	return isFrontCamera && FrontHDR ? YES : %orig;
 }
 
-- (void)_setCameraMode:(int)mode cameraDevice:(int)device
-{
-	isFrontCamera = (mode == 0 && device == 1) ? YES : NO;
-	%orig;
-}
-
 %end
 
 %hook PLCameraView
@@ -72,20 +81,24 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 - (void)_updateOverlayControls
 {
 	PLCameraController *cameraController = MSHookIvar<PLCameraController *>(self, "_cameraController");
-	if (MSHookIvar<int>(cameraController, "_cameraDevice") == 1 && FrontHDR) {
-		MSHookIvar<int>(cameraController, "_cameraDevice") = 0;
-		%orig;
-		MSHookIvar<int>(cameraController, "_cameraDevice") = 1;
+	#define camDevice MSHookIvar<int>(cameraController, "_cameraDevice")
+	if (FrontHDR) {
+		if (camDevice == 1) {
+			camDevice = 0;
+			%orig;
+			camDevice = 1;
+		} else %orig;
 	} else %orig;
 }
 
 - (void)_showSettings:(BOOL)settings sender:(id)sender
 {
 	%orig;
-	if (settings && FrontHDR) {
-		PLCameraSettingsView *settingsView = MSHookIvar<PLCameraSettingsView *>(self, "_settingsView");
-		[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setAlpha:isFrontCamera ? 0.5 : 1.0];
-		[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setUserInteractionEnabled:isFrontCamera ? NO : YES];
+	if (FrontHDR) {
+		if (settings) {
+			PLCameraSettingsView *settingsView = MSHookIvar<PLCameraSettingsView *>(self, "_settingsView");
+			[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setAlpha:isFrontCamera ? 0.0 : 1.0];
+		}
 	}
 }
 
