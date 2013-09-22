@@ -1,11 +1,20 @@
 #import <AVFoundation/AVFoundation.h>
+#import "IOKitDefines.h"
 
 #define PreferencesChangedNotification "com.PS.FrontHDR.settingschanged"
 #define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
 #define FrontHDR [[prefDict objectForKey:@"FrontHDREnabled"] boolValue]
 
-#define isFrontCamera (self.cameraDevice == 1 && self.cameraMode == 0)
 static NSDictionary *prefDict = nil;
+static void PreferencesChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	[prefDict release];
+	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
+}
+
+%group iOS6
+
+#define isFrontCamera (self.cameraDevice == 1 && self.cameraMode == 0)
 
 @interface AVCaptureFigVideoDevice : AVCaptureDevice
 @end
@@ -26,12 +35,6 @@ static NSDictionary *prefDict = nil;
 @property(assign, nonatomic) int cameraMode;
 - (BOOL)isCapturingVideo;
 @end
-
-static void PreferencesChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
-{
-	[prefDict release];
-	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
-}
 
 
 %hook AVResolvedCaptureOptions
@@ -109,11 +112,32 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 
 %end
 
+%end
+
+%group iOS7
+
+static CFTypeRef (*orig_registryEntry)(io_registry_entry_t entry,  CFStringRef key, CFAllocatorRef allocator, IOOptionBits options);
+CFTypeRef replaced_registryEntry(io_registry_entry_t entry,  CFStringRef key, CFAllocatorRef allocator, IOOptionBits options) {
+    CFTypeRef retval = NULL;
+    retval = orig_registryEntry(entry, key, allocator, options);
+    const UInt8 enable[3] = {1, 0, 0};
+    if (CFEqual(key, CFSTR("front-hdr")) && FrontHDR)
+        retval = CFDataCreate(kCFAllocatorDefault, enable, 4);
+    return retval;
+}
+
+%end
+
 
 %ctor
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
 	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PreferencesChangedCallback, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
-	[pool release];
+	if (kCFCoreFoundationVersionNumber > 793.00) {
+		%init(iOS7);
+		MSHookFunction((void *)IORegistryEntryCreateCFProperty, (void *)replaced_registryEntry, (void **)&orig_registryEntry);
+	} else
+		%init(iOS6);
+	[pool drain];
 }
