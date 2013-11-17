@@ -4,6 +4,5 @@ Package: org.thebigboss.fronthdr
 Version: 1.2
 Author: PoomSmart
 Pre-Depends: gsc.hdr-image-capture, gsc.front-facing-camera, firmware (>= 6.0)
-Conflicts: cy+model.iphone (= 3.1), cy+model.iphone (= 3.2), cy+model.iphone (= 3.3)
 Depends: mobilesubstrate, preferenceloader
-Description: Enable HDR in your Front Camera!
+Description: Enable HDR in your Front-Facing Camera!
