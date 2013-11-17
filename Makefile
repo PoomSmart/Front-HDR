@@ -3,7 +3,6 @@ export ARCHS = armv7 armv7s
 
 TWEAK_NAME = FrontHDR
 FrontHDR_FILES = FrontHDR.xm
-FrontHDR_FRAMEWORKS = IOKit
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
