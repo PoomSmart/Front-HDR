@@ -112,9 +112,48 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 
 %group iOS7
 
+%hook AVCaptureFigVideoDevice
+
+- (BOOL)isHDRSupported
+{
+	return FrontHDR ? YES : %orig;
+}
+
+%end
+
+%hook AVResolvedCaptureOptions
+
+- (id)initWithSessionPreset:(id)preset captureOptionsDictionary:(NSDictionary *)dictionary
+{
+	NSMutableDictionary *cameraProperties = [dictionary mutableCopy];
+	NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
+	if (FrontHDR) {
+		if ([[cameraProperties objectForKey:@"OverridePrefixes"] isEqualToString:@"P:"]) {
+			if ([[liveSourceOptions objectForKey:@"VideoPort"] isEqualToString:@"PortTypeFront"]) {
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
+				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
+				[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
+				return %orig(preset, cameraProperties);
+			}
+			return %orig;
+		}
+		return %orig;
+	}
+	return %orig;
+}
+
+%end
+
 %hook PLCameraController
 
+// iOS 7.0
 - (BOOL)supportsHDRForDevice:(int)device
+{
+	return device == 1 && FrontHDR ? YES : %orig;
+}
+
+// iOS 7.1
+- (BOOL)supportsHDRForDevice:(int)device mode:(int)mode
 {
 	return device == 1 && FrontHDR ? YES : %orig;
 }
