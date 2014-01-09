@@ -1,5 +1,5 @@
 include theos/makefiles/common.mk
-export ARCHS = armv7 armv7s
+export ARCHS = armv7 armv7s arm64
 
 TWEAK_NAME = FrontHDR
 FrontHDR_FILES = FrontHDR.xm

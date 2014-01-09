@@ -3,7 +3,7 @@ Front-HDR
 
 Enable HDR Capture in Front-Facing Camera.
 
-Requires HDR-capable iDevices running
+Requires HDR-capable iDevices (except for iPhone 5s) running
 
 iOS 6 and 7
 - iPhone 4S
@@ -12,6 +12,7 @@ iOS 6 and 7
 
 iOS 7 only:
 - iPhone 4
+- iPhone 5c
 - iPad 2
 - iPad 3
 - iPad 4

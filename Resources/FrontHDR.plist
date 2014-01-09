@@ -33,7 +33,7 @@
         <key>label</key>
         <string>Enabled</string>
         <key>PostNotification</key>
-        <string>com.PS.FrontHDR.settingschanged</string>
+        <string>com.PS.FrontHDR.prefs</string>
       </dict>
       <dict>
         <key>cell</key>

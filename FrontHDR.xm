@@ -1,15 +1,14 @@
 #import <AVFoundation/AVFoundation.h>
 
-#define PreferencesChangedNotification "com.PS.FrontHDR.settingschanged"
+#define PreferencesChangedNotification "com.PS.FrontHDR.prefs"
 #define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
-#define FrontHDR [[prefDict objectForKey:@"FrontHDREnabled"] boolValue]
+#define FrontHDR [[[NSDictionary dictionaryWithContentsOfFile:PREF_PATH] objectForKey:@"FrontHDREnabled"] boolValue]
 
-static NSDictionary *prefDict = nil;
-static void PreferencesChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
-{
-	[prefDict release];
-	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
-}
+@interface PLCameraController
+@property(assign, nonatomic) int cameraDevice;
+@property(assign, nonatomic) int cameraMode;
+- (BOOL)isCapturingVideo;
+@end
 
 %group iOS6
 
@@ -24,12 +23,6 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 @end
 
 @interface PLCameraSettingsGroupView : UIView
-@end
-
-@interface PLCameraController
-@property(assign, nonatomic) int cameraDevice;
-@property(assign, nonatomic) int cameraMode;
-- (BOOL)isCapturingVideo;
 @end
 
 
@@ -149,13 +142,13 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 // iOS 7.0
 - (BOOL)supportsHDRForDevice:(int)device
 {
-	return device == 1 && FrontHDR ? YES : %orig;
+	return device == 1 && self.cameraMode == 0 && FrontHDR ? YES : %orig;
 }
 
 // iOS 7.1
 - (BOOL)supportsHDRForDevice:(int)device mode:(int)mode
 {
-	return device == 1 && FrontHDR ? YES : %orig;
+	return device == 1 && self.cameraMode == 0 && FrontHDR ? YES : %orig;
 }
 
 %end
@@ -166,8 +159,6 @@ static void PreferencesChangedCallback(CFNotificationCenterRef center, void *obs
 %ctor
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-	prefDict = [[NSDictionary alloc] initWithContentsOfFile:PREF_PATH];
-	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PreferencesChangedCallback, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
 	if (kCFCoreFoundationVersionNumber > 793.00)
 		%init(iOS7);
 	else
