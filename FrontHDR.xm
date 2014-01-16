@@ -137,31 +137,24 @@
 
 %end
 
-%hook PLCameraController
-
-// iOS 7.0
-- (BOOL)supportsHDRForDevice:(int)device
+Boolean (*old_MGGetBoolAnswer)(CFStringRef);
+Boolean replaced_MGGetBoolAnswer(CFStringRef string)
 {
-	return device == 1 && self.cameraMode == 0 && FrontHDR ? YES : %orig;
+	#define k(key) CFEqual(string, CFSTR(key))
+	if (k("FrontFacingCameraHDRCapability") && FrontHDR)
+		return YES;
+	return old_MGGetBoolAnswer(string);
 }
-
-// iOS 7.1
-- (BOOL)supportsHDRForDevice:(int)device mode:(int)mode
-{
-	return device == 1 && self.cameraMode == 0 && FrontHDR ? YES : %orig;
-}
-
-%end
-
-%end
-
 
 %ctor
 {
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-	if (kCFCoreFoundationVersionNumber > 793.00)
+	if (kCFCoreFoundationVersionNumber > 793.00) {
+		MSHookFunction(((BOOL *)MSFindSymbol(NULL, "_MGGetBoolAnswer")), (BOOL *)replaced_MGGetBoolAnswer, (BOOL **)&old_MGGetBoolAnswer);
 		%init(iOS7);
-	else
+	}
+	else {
 		%init(iOS6);
+	}
 	[pool drain];
 }
