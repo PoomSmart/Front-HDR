@@ -13,7 +13,6 @@ iOS 6 and 7
 iOS 7 only:
 - iPhone 4
 - iPhone 5c
-- iPad 2
 - iPad 3
 - iPad 4
 - iPad Air
