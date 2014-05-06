@@ -79,8 +79,10 @@
 			camDevice = 0;
 			%orig;
 			camDevice = 1;
-		} else %orig;
-	} else %orig;
+		} else
+			%orig;
+	} else
+		%orig;
 }
 
 - (void)_showSettings:(BOOL)settings sender:(id)sender
@@ -116,23 +118,14 @@
 
 %hook AVResolvedCaptureOptions
 
-- (id)initWithSessionPreset:(id)preset captureOptionsDictionary:(NSDictionary *)dictionary
+- (NSDictionary *)resolvedCaptureOptionsDictionary
 {
-	NSMutableDictionary *cameraProperties = [dictionary mutableCopy];
-	NSMutableDictionary *liveSourceOptions = [[cameraProperties objectForKey:@"LiveSourceOptions"] mutableCopy];
-	if (FrontHDR) {
-		if ([[cameraProperties objectForKey:@"OverridePrefixes"] isEqualToString:@"P:"]) {
-			if ([[liveSourceOptions objectForKey:@"VideoPort"] isEqualToString:@"PortTypeFront"]) {
-				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDR"];
-				[liveSourceOptions setObject:[NSNumber numberWithBool:YES] forKey:@"HDRSavePreBracketedFrameAsEV0"];
-				[cameraProperties setObject:liveSourceOptions forKey:@"LiveSourceOptions"];
-				return %orig(preset, cameraProperties);
-			}
-			return %orig;
-		}
+	if (!FrontHDR)
 		return %orig;
-	}
-	return %orig;
+	NSMutableDictionary *orig = [%orig mutableCopy];
+	[orig setValue:[NSNumber numberWithBool:YES] forKeyPath:@"LiveSourceOptions.HDR"];
+	[orig setValue:[NSNumber numberWithBool:YES] forKeyPath:@"LiveSourceOptions.HDRSavePreBracketedFrameAsEV0"];
+	return orig;
 }
 
 %end
@@ -145,6 +138,8 @@ Boolean replaced_MGGetBoolAnswer(CFStringRef string)
 		return YES;
 	return old_MGGetBoolAnswer(string);
 }
+
+%end
 
 %ctor
 {
