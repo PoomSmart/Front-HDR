@@ -1,7 +1,6 @@
 Architecture: iphoneos-arm
 Name: Front HDR
 Package: org.thebigboss.fronthdr
-Conflicts: cy+model.iphone (>= 6)
 Version: 1.2
 Author: PoomSmart
 Pre-Depends: gsc.hdr-image-capture, gsc.front-facing-camera, firmware (>= 6.0)

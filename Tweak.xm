@@ -105,7 +105,7 @@
 
 %end
 
-%group iOS7
+%group iOS78
 
 %hook AVCaptureFigVideoDevice
 
@@ -146,7 +146,7 @@ Boolean replaced_MGGetBoolAnswer(CFStringRef string)
 	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 	if (kCFCoreFoundationVersionNumber > 793.00) {
 		MSHookFunction(((BOOL *)MSFindSymbol(NULL, "_MGGetBoolAnswer")), (BOOL *)replaced_MGGetBoolAnswer, (BOOL **)&old_MGGetBoolAnswer);
-		%init(iOS7);
+		%init(iOS78);
 	}
 	else {
 		%init(iOS6);
