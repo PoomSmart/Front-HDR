@@ -1,8 +1,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import "../PS.h"
 
-#define PREF_PATH @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist"
-#define FrontHDR [[NSDictionary dictionaryWithContentsOfFile:PREF_PATH][@"FrontHDREnabled"] boolValue]
+NSString *const PREF_PATH = @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist";
+CFStringRef const PreferencesNotification = CFSTR("com.PS.FrontHDR.prefs");
 
 @interface PLCameraController
 @property(assign, nonatomic) int cameraDevice;
@@ -25,6 +25,8 @@
 
 @interface PLCameraSettingsGroupView : UIView
 @end
+
+static BOOL FrontHDR;
 
 %group iOS6
 
@@ -87,7 +89,7 @@
 	if (settings && FrontHDR) {
 		PLCameraSettingsView *settingsView = MSHookIvar<PLCameraSettingsView *>(self, "_settingsView");
 		BOOL isFront = self.cameraDevice == 1 && self.cameraMode == 0;
-		[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setAlpha:isFront ? 0.0 : 1.0];
+		[MSHookIvar<PLCameraSettingsGroupView *>(settingsView, "_panoramaGroup") setAlpha:isFront ? 0.0f : 1.0f];
 	}
 }
 
@@ -200,17 +202,35 @@ BOOL is_mediaserverd()
 	return NO;
 }
 
+static void FrontHDRPrefs()
+{
+	NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREF_PATH];
+	FrontHDR = [prefs[@"FrontHDREnabled"] boolValue];
+}
+
+static void PostNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+	system("killall Camera mediaserverd");
+	FrontHDRPrefs();
+}
+
 %ctor
 {
+	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	if (!is_mediaserverd())
+		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PostNotification, PreferencesNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
+	FrontHDRPrefs();
 	if (isiOS7Up) {
-		if (is_mediaserverd()) {
-			%init(iOS8_process);
-		} else {
-			MSHookFunction(((BOOL *)MSFindSymbol(NULL, "_MGGetBoolAnswer")), (BOOL *)replaced_MGGetBoolAnswer, (BOOL **)&old_MGGetBoolAnswer);
+		if (!is_mediaserverd()) {
+			MSHookFunction((BOOL *)MSFindSymbol(NULL, "_MGGetBoolAnswer"), (BOOL *)replaced_MGGetBoolAnswer, (BOOL **)&old_MGGetBoolAnswer);
 			%init(iOS78);
 			if (isiOS8) {
 				%init(iOS8_App);
 			}
+		}
+		if (isiOS8) {
+			dlopen("/System/Library/PrivateFrameworks/Celestial.framework/Celestial", RTLD_LAZY);
+			%init(iOS8_process);
 		}
 	}
 	else {
@@ -218,4 +238,5 @@ BOOL is_mediaserverd()
 			%init(iOS6);
 		}
 	}
+	[pool drain];
 }
