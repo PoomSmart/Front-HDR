@@ -4,28 +4,6 @@
 NSString *const PREF_PATH = @"/var/mobile/Library/Preferences/com.PS.FrontHDR.plist";
 CFStringRef const PreferencesNotification = CFSTR("com.PS.FrontHDR.prefs");
 
-@interface PLCameraController
-@property(assign, nonatomic) int cameraDevice;
-@property(assign, nonatomic) int cameraMode;
-- (BOOL)isCapturingVideo;
-@end
-
-@interface CAMCaptureController
-@property(assign, nonatomic) int cameraDevice;
-+ (BOOL)isStillImageMode:(int)mode;
-@end
-
-@interface PLCameraView
-@property(assign, nonatomic) int cameraDevice;
-@property(assign, nonatomic) int cameraMode;
-@end
-
-@interface PLCameraSettingsView
-@end
-
-@interface PLCameraSettingsGroupView : UIView
-@end
-
 static BOOL FrontHDR;
 
 %group iOS6
