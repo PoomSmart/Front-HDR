@@ -137,15 +137,6 @@ static BOOL FrontHDR;
 
 %group iOS78
 
-%hook AVCaptureFigVideoDevice
-
-- (BOOL)isHDRSupported
-{
-	return YES;
-}
-
-%end
-
 %hook AVResolvedCaptureOptions
 
 - (NSDictionary *)resolvedCaptureOptionsDictionary
@@ -158,11 +149,24 @@ static BOOL FrontHDR;
 
 %end
 
+%end
+
+%group iOS7Up
+
+%hook AVCaptureFigVideoDevice
+
+- (BOOL)isHDRSupported
+{
+	return YES;
+}
+
+%end
+
 Boolean (*old_MGGetBoolAnswer)(CFStringRef);
 Boolean replaced_MGGetBoolAnswer(CFStringRef string)
 {
 	#define k(key) CFEqual(string, CFSTR(key))
-	if (k("FrontFacingCameraHDRCapability"))
+	if (k("FrontFacingCameraHDRCapability") || k("HnHX0gXt8RvhMQzIVMM7hw"))
 		return FrontHDR;
 	return old_MGGetBoolAnswer(string);
 }
@@ -172,9 +176,9 @@ Boolean replaced_MGGetBoolAnswer(CFStringRef string)
 BOOL is_mediaserverd()
 {
 	NSArray *args = [[NSClassFromString(@"NSProcessInfo") processInfo] arguments];
-	NSUInteger count = [args count];
+	NSUInteger count = args.count;
 	if (count != 0) {
-		NSString *executablePath = [args objectAtIndex:0];
+		NSString *executablePath = args[0];
 		return [[executablePath lastPathComponent] isEqualToString:@"mediaserverd"];
 	}
 	return NO;
@@ -201,12 +205,15 @@ static void PostNotification(CFNotificationCenterRef center, void *observer, CFS
 	if (isiOS7Up) {
 		if (!is_mediaserverd()) {
 			MSHookFunction((BOOL *)MSFindSymbol(NULL, "_MGGetBoolAnswer"), (BOOL *)replaced_MGGetBoolAnswer, (BOOL **)&old_MGGetBoolAnswer);
-			%init(iOS78);
+			%init(iOS7Up);
+			if (!isiOS9Up) {
+				%init(iOS78);
+			}
 			if (isiOS8) {
 				%init(iOS8_App);
 			}
 		}
-		if (isiOS8) {
+		if (isiOS8Up) {
 			dlopen("/System/Library/PrivateFrameworks/Celestial.framework/Celestial", RTLD_LAZY);
 			%init(iOS8_process);
 		}
