@@ -198,7 +198,6 @@ static void PostNotification(CFNotificationCenterRef center, void *observer, CFS
 
 %ctor
 {
-	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 	if (!is_mediaserverd())
 		CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, PostNotification, PreferencesNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
 	FrontHDRPrefs();
@@ -223,5 +222,4 @@ static void PostNotification(CFNotificationCenterRef center, void *observer, CFS
 			%init(iOS6);
 		}
 	}
-	[pool drain];
 }
